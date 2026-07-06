@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NexaFlow AI — Test Drive | Jason Adams</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:#0b1120;color:#e2e8f0;font-family:'Inter',sans-serif}
+button,input,select,textarea{font-family:inherit}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:#111827}
+::-webkit-scrollbar-thumb{background:#1e2d45;border-radius:3px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+const C = {
+  bg:"#0b1120",bg2:"#111827",bg3:"#1a2235",
+  blue:"#3b7ef8",blueL:"#5b9cf6",
+  gold:"#f59e0b",green:"#10b981",red:"#ef4444",
+  text:"#e2e8f0",muted:"#94a3b8",border:"#1e2d45",
+};
+
+const STAGES = ["New Inbound Lead","Priority Follow-up","Contacted","Qualified (BANT)","SQL"];
+
+const INDUSTRIES = ["SaaS / Software","FinTech / Financial Services","eCommerce / Retail","Sales Agency / Consulting","Healthcare","Other"];
+const SIZES = ["1–9 employees","10–49 employees","50–199 employees","200–500 employees","500+ employees"];
+const TIMELINES = ["Immediately (within 30 days)","Next quarter (30–90 days)","Within 6 months","Just exploring for now"];
+const BUDGETS = ["Under $200/month","$200–$500/month","$500–$2,000/month","$2,000+/month","Not sure yet"];
+const AUTHORITY = ["I'm the sole decision maker","I need sign-off from one other person","Multiple stakeholders involved","I'm researching for someone else"];
+
+function scoreLead(l) {
+  let ind=0, sz=0, ttl=0;
+  if(l.industry.includes("SaaS")||l.industry.includes("FinTech"))ind=20;
+  else if(l.industry.includes("eCommerce")||l.industry.includes("Healthcare")||l.industry.includes("Agency"))ind=10;
+  if(l.size.includes("200")||l.size.includes("500+"))sz=30;
+  else if(l.size.includes("50"))sz=20;
+  else if(l.size.includes("10"))sz=10;
+  const t=(l.title||"").toLowerCase();
+  if(t.includes("vp")||t.includes("ceo")||t.includes("cro")||t.includes("founder")||t.includes("owner"))ttl=30;
+  else if(t.includes("director")||t.includes("head")||t.includes("revenue"))ttl=20;
+  else if(t.includes("manager"))ttl=10;
+  const total=ind+sz+ttl;
+  return{ind,sz,ttl,total,grade:total>=60?"A":total>=35?"B":"C"};
+}
+
+const gc=g=>g==="A"?C.green:g==="B"?C.gold:C.muted;
+const delay=ms=>new Promise(r=>setTimeout(r,ms));
+
+function Input({label, value, onChange, placeholder, required}) {
+  return (
+    <div style={{marginBottom:14}}>
+      <label style={{display:"block",fontSize:12,fontWeight:600,color:C.muted,marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>
+        {label}{required&&<span style={{color:C.red,marginLeft:4}}>*</span>}
+      </label>
+      <input
+        value={value}
+        onChange={e=>onChange(e.target.value)}
+        placeholder={placeholder}
+        style={{width:"100%",background:C.bg3,border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 14px",fontSize:14,color:C.text,outline:"none",transition:"border-color 0.2s"}}
+        onFocus={e=>e.target.style.borderColor=C.blue}
+        onBlur={e=>e.target.style.borderColor=C.border}
+      />
+    </div>
+  );
+}
+
+function Select({label, value, onChange, options, required}) {
+  return (
+    <div style={{marginBottom:14}}>
+      <label style={{display:"block",fontSize:12,fontWeight:600,color:C.muted,marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>
+        {label}{required&&<span style={{color:C.red,marginLeft:4}}>*</span>}
+      </label>
+      <select
+        value={value}
+        onChange={e=>onChange(e.target.value)}
+        style={{width:"100%",background:C.bg3,border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 14px",fontSize:14,color:value?C.text:C.muted,outline:"none",appearance:"none",cursor:"pointer"}}
+      >
+        <option value="">Select...</option>
+        {options.map(o=><option key={o} value={o}>{o}</option>)}
+      </select>
+    </div>
+  );
+}
+
+function ScoreBar({label, value, max, color, animate}) {
+  const [w, setW] = useState(0);
+  useEffect(()=>{
+    if(animate){const t=setTimeout(()=>setW((value/max)*100),200);return()=>clearTimeout(t);}
+    else setW(0);
+  },[animate,value,max]);
+  return (
+    <div style={{marginBottom:12}}>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:5,fontSize:13}}>
+        <span style={{color:C.muted}}>{label}</span>
+        <span style={{color,fontWeight:700}}>+{value}pts</span>
+      </div>
+      <div style={{height:8,background:C.bg3,borderRadius:4,overflow:"hidden"}}>
+        <div style={{height:"100%",width:`${w}%`,background:color,borderRadius:4,transition:"width 1s ease"}}/>
+      </div>
+    </div>
+  );
+}
+
+function StepDot({label, active, done}) {
+  return (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+      <div style={{width:30,height:30,borderRadius:"50%",background:done?C.green:active?C.blue:C.bg3,border:`2px solid ${done?C.green:active?C.blue:C.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:done||active?"white":C.muted,transition:"all 0.4s"}}>
+        {done?"✓":""}
+      </div>
+      <span style={{fontSize:9,color:active?C.blueL:C.muted,textAlign:"center",maxWidth:64,fontWeight:active?600:400,lineHeight:1.3}}>{label}</span>
+    </div>
+  );
+}
+
+function SlackCard({lead, score, type}) {
+  const isRep = type==="rep";
+  const domain = (lead.email||"").split("@")[1]||"company.io";
+  return (
+    <div style={{background:"#1a1d21",border:"1px solid #2a2d31",borderRadius:10,padding:"16px 18px",marginBottom:12}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+        <div style={{width:32,height:32,borderRadius:8,background:isRep?C.blue:C.red,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>
+          {isRep?"⚡":"🚨"}
+        </div>
+        <div>
+          <span style={{color:"white",fontWeight:700,fontSize:14}}>{isRep?"Zapier":"SLA Monitor"}</span>
+          <span style={{color:"#666",fontSize:11,marginLeft:8}}>APP · just now</span>
+        </div>
+      </div>
+      {isRep ? (
+        <div style={{color:"#ccc",lineHeight:1.9,fontSize:13}}>
+          <div style={{marginBottom:8}}>
+            🎯 <strong style={{color:"white"}}>New Inbound Lead — Grade <span style={{color:gc(score.grade),fontSize:15}}>{score.grade}</span></strong>
+          </div>
+          <div style={{background:"#222",borderRadius:8,padding:"12px 14px",display:"flex",flexDirection:"column",gap:4}}>
+            <div><span style={{color:"#888",minWidth:90,display:"inline-block"}}>Name</span><strong style={{color:"white"}}>{lead.firstName} {lead.lastName}</strong></div>
+            <div><span style={{color:"#888",minWidth:90,display:"inline-block"}}>Company</span><strong style={{color:"white"}}>{lead.company}</strong></div>
+            <div><span style={{color:"#888",minWidth:90,display:"inline-block"}}>Title</span>{lead.title}</div>
+            <div><span style={{color:"#888",minWidth:90,display:"inline-block"}}>Industry</span>{lead.industry}</div>
+            <div><span style={{color:"#888",minWidth:90,display:"inline-block"}}>Company Size</span>{lead.size}</div>
+            <div><span style={{color:"#888",minWidth:90,display:"inline-block"}}>Score</span><strong style={{color:C.gold}}>{score.total}/80 pts</strong></div>
+            <div><span style={{color:"#888",minWidth:90,display:"inline-block"}}>Grade</span><strong style={{color:gc(score.grade)}}>{score.grade} — {score.grade==="A"?"Priority Follow-up":score.grade==="B"?"Standard Nurture":"Standard Nurture"}</strong></div>
+            <div><span style={{color:"#888",minWidth:90,display:"inline-block"}}>LinkedIn</span>Not found ({domain})</div>
+          </div>
+          <div style={{marginTop:10}}>
+            <span>📌 </span><a href="https://nexaflowai.pipedrive.com/pipeline/3/user/everyone?quickFilter=none" target="_blank" rel="noreferrer" style={{color:C.blueL,textDecoration:"underline"}}>View Live Pipeline in Pipedrive →</a>
+          </div>
+          <div style={{marginTop:4}}>⏱ SLA: <strong>Call within 60 seconds</strong> (Tier A)</div>
+        </div>
+      ) : (
+        <div style={{color:"#ccc",lineHeight:1.9,fontSize:13}}>
+          <div style={{marginBottom:8}}>🚨 <strong style={{color:C.red,fontSize:14}}>SLA BREACH — Tier A Lead Uncontacted</strong></div>
+          <div style={{background:"#222",borderRadius:8,padding:"12px 14px",display:"flex",flexDirection:"column",gap:4}}>
+            <div><span style={{color:"#888",minWidth:90,display:"inline-block"}}>Deal</span><strong style={{color:"white"}}>{lead.company} — Inbound Lead</strong></div>
+            <div><span style={{color:"#888",minWidth:90,display:"inline-block"}}>Score</span><strong style={{color:C.gold}}>{score.total}/80 pts</strong></div>
+            <div><span style={{color:"#888",minWidth:90,display:"inline-block"}}>SLA Status</span><strong style={{color:C.red}}>Breached</strong></div>
+          </div>
+          <div style={{marginTop:10}}>Rep has NOT responded within 15 minutes. Immediate follow-up required.</div>
+          <div style={{marginTop:6}}>📌 <a href="https://nexaflowai.pipedrive.com/pipeline/3/user/everyone?quickFilter=none" target="_blank" rel="noreferrer" style={{color:C.blueL,textDecoration:"underline"}}>View Live Pipeline in Pipedrive →</a></div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PipelineBoard({deals}) {
+  return (
+    <div style={{overflowX:"auto",paddingBottom:8}}>
+      <div style={{display:"flex",gap:10,minWidth:750}}>
+        {STAGES.map(stage=>{
+          const sd=deals.filter(d=>d.stage===stage);
+          return (
+            <div key={stage} style={{flex:1,minWidth:130}}>
+              <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                <span>{stage}</span>
+                <span style={{color:C.blue,fontWeight:800}}>{sd.length}</span>
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:8,minHeight:60}}>
+                {sd.map(d=>(
+                  <div key={d.id} style={{background:C.bg3,border:`1px solid ${C.border}`,borderLeft:`3px solid ${gc(d.grade)}`,borderRadius:8,padding:"10px 12px",animation:"fadeIn 0.4s ease"}}>
+                    <div style={{fontSize:12,fontWeight:700,color:C.text,marginBottom:3}}>{d.company}</div>
+                    <div style={{fontSize:11,color:C.muted,marginBottom:7}}>{d.name}</div>
+                    <div style={{display:"inline-flex",gap:6,alignItems:"center"}}>
+                      <span style={{background:`${gc(d.grade)}18`,color:gc(d.grade),fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:100}}>Grade {d.grade}</span>
+                      <span style={{fontSize:10,color:C.muted}}>{d.score}pts</span>
+                    </div>
+                  </div>
+                ))}
+                {sd.length===0&&(
+                  <div style={{border:`1px dashed ${C.border}`,borderRadius:8,padding:"18px 10px",textAlign:"center",fontSize:11,color:C.border}}>—</div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  const [form, setForm] = useState({
+    firstName:"", lastName:"", email:"", title:"",
+    company:"", website:"", industry:"", size:"",
+    need:"", budget:"", authority:"", timeline:"", attribution:""
+  });
+  const [step, setStep] = useState(0);
+  const [score, setScore] = useState(null);
+  const [deals, setDeals] = useState([]);
+  const [showSLA, setShowSLA] = useState(false);
+  const [slaSec, setSlaSec] = useState(15);
+  const [breached, setBreached] = useState(false);
+  const [animScore, setAnimScore] = useState(0);
+  const [errors, setErrors] = useState({});
+  const timerRef = useRef(null);
+  const resultsRef = useRef(null);
+
+  const upd = (k,v) => setForm(f=>({...f,[k]:v}));
+
+  const validate = () => {
+    const e = {};
+    if(!form.firstName.trim()) e.firstName="Required";
+    if(!form.lastName.trim()) e.lastName="Required";
+    if(!form.email.trim()) e.email="Required";
+    if(!form.title.trim()) e.title="Required";
+    if(!form.company.trim()) e.company="Required";
+    if(!form.industry) e.industry="Required";
+    if(!form.size) e.size="Required";
+    setErrors(e);
+    return Object.keys(e).length===0;
+  };
+
+  const reset = () => {
+    setStep(0); setScore(null); setShowSLA(false);
+    setSlaSec(15); setBreached(false); setAnimScore(0);
+    if(timerRef.current) clearInterval(timerRef.current);
+  };
+
+  const runEngine = async () => {
+    if(!validate()) return;
+    reset();
+    // scroll to results
+    setTimeout(()=>resultsRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);
+
+    await delay(300); setStep(1);
+    await delay(900); setStep(2);
+    await delay(1300); setStep(3);
+
+    const s = scoreLead(form);
+    let curr=0;
+    const si=setInterval(()=>{curr+=2;if(curr>=s.total){curr=s.total;clearInterval(si);}setAnimScore(curr);},18);
+
+    await delay(1600); setScore(s); setStep(4);
+    await delay(1300);
+
+    const dealId = Date.now();
+    setDeals(prev=>[...prev,{
+      id:dealId, company:form.company||"Your Company",
+      name:`${form.firstName} ${form.lastName}`,
+      stage:s.grade==="A"?"Priority Follow-up":"New Inbound Lead",
+      grade:s.grade, score:s.total
+    }]);
+
+    setStep(5); await delay(1300);
+
+    if(s.grade==="A") {
+      setStep(6); setShowSLA(true);
+      let sec=900; // 15 minutes = 900 seconds
+      setSlaSec(sec);
+      timerRef.current=setInterval(()=>{
+        sec-=1; setSlaSec(sec);
+        if(sec<=0){clearInterval(timerRef.current);setBreached(true);}
+      },1000); // real 1 second per tick
+    }
+    setStep(7);
+  };
+
+  const inputStyle = (key) => ({
+    width:"100%", background:C.bg3,
+    border:`1px solid ${errors[key]?C.red:C.border}`,
+    borderRadius:8, padding:"10px 14px", fontSize:14,
+    color:C.text, outline:"none",
+  });
+
+  const labelStyle = {
+    display:"block", fontSize:12, fontWeight:600,
+    color:C.muted, marginBottom:6,
+    textTransform:"uppercase", letterSpacing:"0.06em"
+  };
+
+  return (
+    <div style={{minHeight:"100vh",background:C.bg,color:C.text,fontFamily:"'Inter',sans-serif",fontSize:14}}>
+      <style>{`@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}`}</style>
+
+      {/* HEADER */}
+      <div style={{background:C.bg2,borderBottom:`1px solid ${C.border}`,padding:"16px 24px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12,position:"sticky",top:0,zIndex:50}}>
+        <div>
+          <div style={{fontSize:18,fontWeight:700}}>NexaFlow AI — <span style={{color:C.blueL}}>Test Drive</span></div>
+          <div style={{fontSize:12,color:C.muted,marginTop:2}}>Enter your details. Watch the engine score you in real time.</div>
+        </div>
+        <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+          <a href="index.html" style={{background:"transparent",color:C.muted,padding:"8px 16px",borderRadius:8,fontSize:13,border:`1px solid ${C.border}`,textDecoration:"none"}}>← Case Study</a>
+          <button onClick={reset} style={{background:"transparent",color:C.muted,padding:"8px 16px",borderRadius:8,fontSize:13,border:`1px solid ${C.border}`,cursor:"pointer"}}>Reset</button>
+        </div>
+      </div>
+
+      <div style={{maxWidth:1100,margin:"0 auto",padding:"32px 16px"}}>
+
+        {/* INTRO */}
+        <div style={{background:C.bg2,border:`1px solid ${C.border}`,borderRadius:12,padding:"24px 28px",marginBottom:28,textAlign:"center"}}>
+          <div style={{fontSize:11,color:C.gold,textTransform:"uppercase",letterSpacing:"0.1em",fontWeight:700,marginBottom:10}}>Interactive Simulation</div>
+          <h2 style={{fontSize:"clamp(1.2rem,3vw,1.6rem)",fontWeight:700,fontFamily:"Georgia,serif",marginBottom:10}}>Enter your details. See how NexaFlow AI scores you.</h2>
+          <p style={{color:C.muted,fontSize:14,maxWidth:560,margin:"0 auto"}}>
+            Fill in the form below using your real job title, company size, and industry. The scoring engine will evaluate your ICP fit, assign a Grade A/B/C, generate a live Slack notification with your name on it, and start a 15-minute SLA countdown — all in real time.
+          </p>
+          <p style={{color:C.border,fontSize:12,marginTop:10}}>No data is stored. No API calls are made. Everything runs in your browser.</p>
+        </div>
+
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(320px,1fr))",gap:24}}>
+
+          {/* FORM */}
+          <div>
+            <div style={{background:C.bg2,border:`1px solid ${C.border}`,borderRadius:12,padding:24}}>
+              <div style={{fontSize:11,color:C.gold,textTransform:"uppercase",letterSpacing:"0.08em",fontWeight:700,marginBottom:20}}>
+                NexaFlow AI — Demo Request Form
+              </div>
+
+              {/* ROW */}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:0}}>
+                <div>
+                  <label style={labelStyle}>First Name <span style={{color:C.red}}>*</span></label>
+                  <input value={form.firstName} onChange={e=>upd("firstName",e.target.value)} placeholder="Sarah" style={inputStyle("firstName")}/>
+                  {errors.firstName&&<div style={{fontSize:11,color:C.red,marginTop:3}}>{errors.firstName}</div>}
+                </div>
+                <div>
+                  <label style={labelStyle}>Last Name <span style={{color:C.red}}>*</span></label>
+                  <input value={form.lastName} onChange={e=>upd("lastName",e.target.value)} placeholder="Chen" style={inputStyle("lastName")}/>
+                  {errors.lastName&&<div style={{fontSize:11,color:C.red,marginTop:3}}>{errors.lastName}</div>}
+                </div>
+              </div>
+
+              <div style={{marginTop:14}}>
+                <label style={labelStyle}>Work Email <span style={{color:C.red}}>*</span></label>
+                <input value={form.email} onChange={e=>upd("email",e.target.value)} placeholder="sarah@yourcompany.io" style={inputStyle("email")}/>
+                {errors.email&&<div style={{fontSize:11,color:C.red,marginTop:3}}>{errors.email}</div>}
+              </div>
+
+              <div style={{marginTop:14}}>
+                <label style={labelStyle}>Job Title <span style={{color:C.red}}>*</span></label>
+                <input value={form.title} onChange={e=>upd("title",e.target.value)} placeholder="VP of Sales" style={inputStyle("title")}/>
+                {errors.title&&<div style={{fontSize:11,color:C.red,marginTop:3}}>{errors.title}</div>}
+                <div style={{fontSize:11,color:C.muted,marginTop:4}}>Try: VP, CRO, Director, Head of Sales, Manager…</div>
+              </div>
+
+              <div style={{marginTop:14}}>
+                <label style={labelStyle}>Company Name <span style={{color:C.red}}>*</span></label>
+                <input value={form.company} onChange={e=>upd("company",e.target.value)} placeholder="Acme Corp" style={inputStyle("company")}/>
+                {errors.company&&<div style={{fontSize:11,color:C.red,marginTop:3}}>{errors.company}</div>}
+              </div>
+
+              <div style={{marginTop:14}}>
+                <label style={labelStyle}>Industry <span style={{color:C.red}}>*</span></label>
+                <select value={form.industry} onChange={e=>upd("industry",e.target.value)} style={{...inputStyle("industry"),appearance:"none",cursor:"pointer"}}>
+                  <option value="">Select industry…</option>
+                  {INDUSTRIES.map(o=><option key={o} value={o}>{o}</option>)}
+                </select>
+                {errors.industry&&<div style={{fontSize:11,color:C.red,marginTop:3}}>{errors.industry}</div>}
+              </div>
+
+              <div style={{marginTop:14}}>
+                <label style={labelStyle}>Company Size <span style={{color:C.red}}>*</span></label>
+                <select value={form.size} onChange={e=>upd("size",e.target.value)} style={{...inputStyle("size"),appearance:"none",cursor:"pointer"}}>
+                  <option value="">Select size…</option>
+                  {SIZES.map(o=><option key={o} value={o}>{o}</option>)}
+                </select>
+                {errors.size&&<div style={{fontSize:11,color:C.red,marginTop:3}}>{errors.size}</div>}
+              </div>
+
+              <div style={{marginTop:14}}>
+                <label style={labelStyle}>Monthly Budget for Sales Tools</label>
+                <select value={form.budget} onChange={e=>upd("budget",e.target.value)} style={{...inputStyle("budget"),appearance:"none",cursor:"pointer"}}>
+                  <option value="">Select budget…</option>
+                  {BUDGETS.map(o=><option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+
+              <div style={{marginTop:14}}>
+                <label style={labelStyle}>Implementation Timeline</label>
+                <select value={form.timeline} onChange={e=>upd("timeline",e.target.value)} style={{...inputStyle("timeline"),appearance:"none",cursor:"pointer"}}>
+                  <option value="">Select timeline…</option>
+                  {TIMELINES.map(o=><option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+
+              <div style={{marginTop:14}}>
+                <label style={labelStyle}>Biggest Sales Challenge</label>
+                <textarea value={form.need} onChange={e=>upd("need",e.target.value)} placeholder="Our reps have no visibility into deal risk…" rows={3} style={{...inputStyle("need"),resize:"vertical",lineHeight:1.6}}/>
+              </div>
+
+              <button onClick={runEngine} style={{width:"100%",marginTop:20,background:C.blue,color:"white",border:"none",borderRadius:10,padding:"14px",fontSize:15,fontWeight:700,cursor:"pointer",transition:"background 0.2s",letterSpacing:"0.01em"}}>
+                ▶ Run the Lead Engine
+              </button>
+
+              <div style={{fontSize:11,color:C.border,textAlign:"center",marginTop:10}}>
+                Required fields marked * · No data stored · Runs in browser only
+              </div>
+            </div>
+
+            {/* SCORING MATRIX */}
+            <div style={{background:C.bg2,border:`1px solid ${C.border}`,borderRadius:12,padding:20,marginTop:20}}>
+              <div style={{fontSize:11,color:C.muted,textTransform:"uppercase",letterSpacing:"0.08em",fontWeight:700,marginBottom:14}}>Scoring Matrix</div>
+              <div style={{display:"grid",gap:8}}>
+                {[
+                  {label:"SaaS/FinTech industry",pts:20,color:C.blue},
+                  {label:"eCommerce/Healthcare",pts:10,color:C.blue},
+                  {label:"200–500 employees",pts:30,color:C.gold},
+                  {label:"50–199 employees",pts:20,color:C.gold},
+                  {label:"VP/CEO/CRO/Founder",pts:30,color:C.green},
+                  {label:"Director/Head of",pts:20,color:C.green},
+                ].map(r=>(
+                  <div key={r.label} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12,padding:"6px 10px",background:C.bg3,borderRadius:6}}>
+                    <span style={{color:C.muted}}>{r.label}</span>
+                    <span style={{color:r.color,fontWeight:700}}>+{r.pts}pts</span>
+                  </div>
+                ))}
+                <div style={{display:"flex",justifyContent:"space-between",padding:"8px 10px",background:"rgba(59,126,248,0.08)",borderRadius:6,marginTop:4}}>
+                  <span style={{fontSize:12,fontWeight:700,color:C.text}}>Maximum Score</span>
+                  <span style={{fontSize:12,fontWeight:800,color:C.blueL}}>80 pts</span>
+                </div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginTop:12}}>
+                {[["A","60–80","Priority",C.green],["B","35–59","Standard",C.gold],["C","0–34","Nurture",C.muted]].map(([g,r,l,c])=>(
+                  <div key={g} style={{background:`${c}12`,border:`1px solid ${c}40`,borderRadius:8,padding:"10px 8px",textAlign:"center"}}>
+                    <div style={{fontSize:18,fontWeight:800,color:c,fontFamily:"Georgia,serif"}}>{g}</div>
+                    <div style={{fontSize:10,color:c,fontWeight:600}}>{r} pts</div>
+                    <div style={{fontSize:10,color:C.muted,marginTop:2}}>{l}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* RESULTS */}
+          <div ref={resultsRef}>
+
+            {/* STEP PROGRESS */}
+            <div style={{background:C.bg2,border:`1px solid ${C.border}`,borderRadius:12,padding:"20px 24px",marginBottom:20}}>
+              <div style={{fontSize:11,color:C.muted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:16}}>Pipeline Progress</div>
+              <div style={{display:"flex",alignItems:"flex-start"}}>
+                {["Form","Enrich","Score","Pipedrive","Slack","SLA","Done"].map((label,i)=>(
+                  <div key={label} style={{display:"flex",alignItems:"center",flex:i<6?1:0}}>
+                    <StepDot label={label} active={step===i+1} done={step>i+1}/>
+                    {i<6&&<div style={{flex:1,height:2,background:step>i+1?C.green:C.border,transition:"background 0.4s",marginBottom:20}}/>}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* ENRICHMENT */}
+            <div style={{background:C.bg2,border:`1px solid ${C.border}`,borderRadius:12,padding:20,marginBottom:20,opacity:step>=2?1:0.35,transition:"opacity 0.5s"}}>
+              <div style={{fontSize:11,color:C.muted,textTransform:"uppercase",letterSpacing:"0.08em",fontWeight:700,marginBottom:14}}>
+                Hunter.io Enrichment
+                {step===2&&<span style={{marginLeft:10,fontSize:11,color:C.gold,fontWeight:600}}>Running…</span>}
+                {step>2&&<span style={{marginLeft:10,fontSize:11,color:C.green,fontWeight:600}}>✓ Complete</span>}
+              </div>
+              {step>=2?(
+                <div>
+                  {[
+                    ["Domain",(form.email||"").split("@")[1]||"—"],
+                    ["Organization",form.company||"—"],
+                    ["LinkedIn","Not found (live domain required)"],
+                    ["Email Count","0"],
+                  ].map(([k,v])=>(
+                    <div key={k} style={{display:"flex",justifyContent:"space-between",fontSize:13,padding:"8px 0",borderBottom:`1px solid ${C.border}`}}>
+                      <span style={{color:C.muted}}>{k}</span>
+                      <span style={{color:C.text,fontWeight:500}}>{v}</span>
+                    </div>
+                  ))}
+                </div>
+              ):(
+                <div style={{fontSize:13,color:C.border,textAlign:"center",padding:"24px 0"}}>Waiting for form submission…</div>
+              )}
+            </div>
+
+            {/* SCORING */}
+            <div style={{background:C.bg2,border:`1px solid ${C.border}`,borderRadius:12,padding:20,marginBottom:20,opacity:step>=3?1:0.35,transition:"opacity 0.5s"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+                <div style={{fontSize:11,color:C.muted,textTransform:"uppercase",letterSpacing:"0.08em",fontWeight:700}}>
+                  Lead Scoring Engine
+                  {step===3&&<span style={{marginLeft:10,color:C.gold,fontWeight:600}}>Calculating…</span>}
+                </div>
+                {step>=3&&score&&(
+                  <div style={{background:`${gc(score.grade)}18`,color:gc(score.grade),fontSize:16,fontWeight:800,padding:"6px 16px",borderRadius:100,border:`1px solid ${gc(score.grade)}40`}}>
+                    {animScore}/80 · Grade {score.grade}
+                  </div>
+                )}
+              </div>
+              {step>=3&&score?(
+                <>
+                  <ScoreBar label={`Industry: ${form.industry||"—"}`} value={score.ind} max={20} color={C.blue} animate={step>=3}/>
+                  <ScoreBar label={`Company Size: ${form.size||"—"}`} value={score.sz} max={30} color={C.gold} animate={step>=3}/>
+                  <ScoreBar label={`Job Title: ${form.title||"—"}`} value={score.ttl} max={30} color={C.green} animate={step>=3}/>
+                  <div style={{marginTop:14,padding:"12px 16px",background:C.bg3,borderRadius:8,fontSize:13,color:C.muted,lineHeight:1.7}}>
+                    <strong style={{color:C.text}}>Scoring Breakdown:</strong> Industry {score.ind}pts + Size {score.sz}pts + Title {score.ttl}pts = <strong style={{color:gc(score.grade)}}>{score.total}/80</strong><br/>
+                    <strong style={{color:C.text}}>Deal Stage:</strong> {score.grade==="A"?"Priority Follow-up (Tier A — call within 60 seconds)":"Standard Nurture (Tier B/C)"}
+                  </div>
+                </>
+              ):(
+                <div style={{fontSize:13,color:C.border,textAlign:"center",padding:"24px 0"}}>Waiting for enrichment…</div>
+              )}
+            </div>
+
+            {/* SLACK */}
+            <div style={{background:C.bg2,border:`1px solid ${C.border}`,borderRadius:12,padding:20,marginBottom:20,opacity:step>=5?1:0.35,transition:"opacity 0.5s"}}>
+              <div style={{fontSize:11,color:C.muted,textTransform:"uppercase",letterSpacing:"0.08em",fontWeight:700,marginBottom:14}}>
+                Slack · #inbound-leads
+                {step>=5&&<span style={{marginLeft:10,fontSize:11,color:C.green,fontWeight:600}}>✓ Notification sent</span>}
+              </div>
+              {step>=5&&score?(
+                <>
+                  <SlackCard lead={form} score={score} type="rep"/>
+                  {breached&&<SlackCard lead={form} score={score} type="sla"/>}
+                </>
+              ):(
+                <div style={{fontSize:13,color:C.border,textAlign:"center",padding:"24px 0"}}>No messages yet…</div>
+              )}
+            </div>
+
+            {/* SLA */}
+            {showSLA&&(
+              <div style={{background:C.bg2,border:`2px solid ${breached?C.red:C.gold}`,borderRadius:12,padding:20,marginBottom:20,transition:"border-color 0.5s",animation:"fadeIn 0.4s ease"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+                  <div style={{fontSize:11,color:breached?C.red:C.gold,textTransform:"uppercase",letterSpacing:"0.08em",fontWeight:700}}>SLA Monitor — Zap 2</div>
+                  <div style={{background:breached?`${C.red}22`:`${C.gold}22`,color:breached?C.red:C.gold,fontSize:12,fontWeight:800,padding:"4px 14px",borderRadius:100,border:`1px solid ${breached?C.red:C.gold}40`}}>
+                    {breached?"🔴 BREACHED":"🟡 PENDING"}
+                  </div>
+                </div>
+                <div style={{textAlign:"center",padding:"20px 0"}}>
+                  <div style={{fontSize:52,fontWeight:800,color:breached?C.red:C.gold,fontFamily:"Georgia,serif",lineHeight:1,marginBottom:10,transition:"color 0.5s"}}>
+                    {breached?"00:00":`${String(Math.floor(slaSec/60)).padStart(2,"0")}:${String(slaSec%60).padStart(2,"0")}`}
+                  </div>
+                  <div style={{fontSize:13,color:C.muted}}>
+                    {breached?"SLA window elapsed — manager escalation fired":"remaining in 15-minute SLA window · Rep must log call activity"}
+                  </div>
+                </div>
+                <div style={{fontSize:13,color:C.muted,padding:"12px 16px",background:C.bg3,borderRadius:8,lineHeight:1.7}}>
+                  <div><strong style={{color:C.text}}>Deal:</strong> {form.company} — Inbound Lead</div>
+                  <div><strong style={{color:C.text}}>SLA Status:</strong> <strong style={{color:breached?C.red:C.gold}}>{breached?"Breached":"Pending"}</strong></div>
+                  {breached&&<div style={{marginTop:6,color:C.red}}>🚨 Manager notified via Slack · Deal flagged in Pipedrive</div>}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* PIPELINE */}
+        {deals.length>0&&(
+          <div style={{background:C.bg2,border:`1px solid ${C.border}`,borderRadius:12,padding:24,marginTop:8,animation:"fadeIn 0.5s ease"}}>
+            <div style={{fontSize:11,color:C.muted,textTransform:"uppercase",letterSpacing:"0.08em",fontWeight:700,marginBottom:18}}>
+              Pipedrive · NexaFlow AI — Inbound Leads Pipeline · <span style={{color:C.blue}}>{deals.length} deal{deals.length!==1?"s":""}</span>
+            </div>
+            <PipelineBoard deals={deals}/>
+          </div>
+        )}
+
+        {/* FOOTER */}
+        <div style={{textAlign:"center",marginTop:40,fontSize:12,color:C.muted,padding:"24px 0",borderTop:`1px solid ${C.border}`}}>
+          Built by <a href="https://linkedin.com/in/jasonadams-email" target="_blank" style={{color:C.blueL,textDecoration:"none"}}>Jason Adams</a>
+          &nbsp;·&nbsp; CRM Automation & RevOps Specialist · Lagos, Nigeria
+          &nbsp;·&nbsp; <a href="index.html" style={{color:C.blueL,textDecoration:"none"}}>← Full Case Study</a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
